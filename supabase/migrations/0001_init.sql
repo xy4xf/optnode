@@ -1,6 +1,5 @@
--- optnode — subscription link tables.
--- Run this in the Supabase SQL Editor (Dashboard → SQL → New query).
--- Idempotent: safe to re-run.
+-- optnode — initial schema: subscription links + rate-limit buckets.
+-- Applied via `supabase db push` (see README). Idempotent: safe to re-run.
 
 -- ──────────────────────────────────────────────────────────────────────────
 -- Subscriptions: one row per generated link.

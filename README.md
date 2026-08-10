@@ -95,9 +95,20 @@ curl "http://localhost:3000/api/sub/dl?id=<uuid>&t=<token>"
 `create` options: `fullConfig`, `appendType`, `template`, `ttlMins`
 (≤60, default 15), `maxDownloads`, `expiresHours` (short-link lifetime, ≤720).
 
-**Setup:** run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL
-Editor, then set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUB_LINK_SECRET`
+**Setup:** apply the schema with the Supabase CLI (no manual paste):
+
+```bash
+brew install supabase/tap/supabase                 # macOS; see docs for other OS
+supabase link --project-ref <your-project-ref>     # ref = Project Settings → Ref ID
+supabase db push                                   # applies supabase/migrations/*.sql
+```
+
+Then set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUB_LINK_SECRET`
 (see [`.env.example`](./.env.example)) and `PUBLIC_BASE_URL`.
+
+> Alternatively, open [`supabase/migrations/0001_init.sql`](./supabase/migrations/0001_init.sql)
+> in the Supabase SQL Editor and Run it. The CLI path is preferred — future
+> schema changes go in a new `supabase/migrations/*.sql` file and `db push` again.
 
 **Brute-force protection:** unguessable 50-bit short codes + uniform 404s;
 HMAC-signed tokens (cannot be forged or extended); per-IP rate limits on
