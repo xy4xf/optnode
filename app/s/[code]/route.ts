@@ -1,12 +1,12 @@
 // GET /s/<code>
 //
 // Persistent short link serving the stored mihomo YAML directly — importable as
-// a subscription URL in clients. Enumerate-resistant: missing/expired/exceeded
-// all return a uniform 404, and lookups are rate-limited per IP.
+// a subscription URL in clients. Enumerate-resistant: missing codes return a
+// uniform 404, and lookups are rate-limited per IP.
 
 import { getClientIP } from "@/lib/http/ip";
 import { rateLimit } from "@/lib/ratelimit";
-import { getByCode, incrementDownload, isServable } from "@/lib/sub/db";
+import { getByCode, incrementDownload } from "@/lib/sub/db";
 
 export async function GET(request: Request, ctx: RouteContext<"/s/[code]">) {
   const { code } = await ctx.params;
@@ -28,7 +28,7 @@ export async function GET(request: Request, ctx: RouteContext<"/s/[code]">) {
     return new Response("Not found", { status: 404 });
   }
   // Uniform 404 — never reveal whether a code exists.
-  if (!row || !isServable(row)) return new Response("Not found", { status: 404 });
+  if (!row) return new Response("Not found", { status: 404 });
 
   try {
     await incrementDownload(row.id);
@@ -36,13 +36,12 @@ export async function GET(request: Request, ctx: RouteContext<"/s/[code]">) {
     // Non-fatal.
   }
 
-  const exp = row.expires_at ? Math.floor(new Date(row.expires_at).getTime() / 1000) : 0;
   return new Response(row.content, {
     status: 200,
     headers: {
       "Content-Type": "text/yaml; charset=utf-8",
       "Cache-Control": "no-store",
-      "Subscription-Userinfo": `upload=0; download=0; total=0${exp ? `; expire=${exp}` : ""}`,
+      "Subscription-Userinfo": "upload=0; download=0; total=0",
     },
   });
 }
