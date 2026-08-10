@@ -1,7 +1,7 @@
 // Shared Supabase row helpers for the subscription feature.
 //
 // Centralizes insert/lookup so the route handlers stay focused on request
-// handling, rate limiting, and auth. All access uses the service role client.
+// handling and rate limiting. All access uses the service role client.
 
 import { getSupabase } from "@/lib/supabase/server";
 import { generateCode } from "./code";
@@ -11,7 +11,6 @@ export interface SubscriptionRow {
   code: string;
   content: string;
   node_count: number;
-  password_hash: string | null;
   max_downloads: number | null;
   download_count: number;
   expires_at: string | null;
@@ -22,7 +21,6 @@ export interface SubscriptionRow {
 export interface CreateInput {
   content: string;
   node_count: number;
-  password_hash: string | null;
   max_downloads: number | null;
   expires_at: string | null;
   creator_ip: string;
@@ -39,7 +37,6 @@ export async function createSubscription(input: CreateInput): Promise<Subscripti
         code,
         content: input.content,
         node_count: input.node_count,
-        password_hash: input.password_hash,
         max_downloads: input.max_downloads,
         expires_at: input.expires_at,
         creator_ip: input.creator_ip,

@@ -10,7 +10,6 @@ create table if not exists subscriptions (
   code           text unique not null,          -- short code, 10 base32 chars (~50 bit), unguessable
   content        text not null,                 -- converted mihomo YAML, served on download
   node_count     int  not null default 0,
-  password_hash  text,                          -- nullable scrypt hash; null = no password
   max_downloads  int,                           -- nullable cap on total downloads
   download_count int  not null default 0,
   expires_at     timestamptz,                   -- nullable absolute expiry of the short link

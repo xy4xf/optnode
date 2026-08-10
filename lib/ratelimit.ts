@@ -31,8 +31,8 @@ function sanitize(key: string): string {
  * Count this hit against `scope` for `ip` and decide if it exceeds `limit`
  * within the last `windowSec` seconds.
  *
- * `extra` is folded into the key so distinct limits (e.g. per-IP+code password
- * attempts) can share a scope but partition further.
+ * `extra` is folded into the key so distinct limits can share a scope but
+ * partition further (e.g. per-IP+target).
  */
 export async function rateLimit(
   scope: string,
@@ -65,27 +65,4 @@ export async function rateLimit(
     remaining: Math.max(0, limit - total),
     total,
   };
-}
-
-/** Check a limit WITHOUT consuming a hit (e.g. before doing expensive work). */
-export async function peekLimit(
-  scope: string,
-  ip: string,
-  limit: number,
-  windowSec: number,
-  extra = ""
-): Promise<RateLimitResult> {
-  const ipk = sanitize(ip);
-  const ex = extra ? `:${sanitize(extra)}` : "";
-  const sb = getSupabase();
-  const since = new Date(Date.now() - windowSec * 1000).toISOString();
-  const { count, error } = await sb
-    .from("rate_limits")
-    .select("*", { count: "exact", head: true })
-    .like("bucket", `${ipk}:${scope}${ex}:%`)
-    .gt("updated_at", since);
-
-  if (error) return { ok: true, remaining: limit, total: 0 };
-  const total = count ?? 0;
-  return { ok: total <= limit, remaining: Math.max(0, limit - total), total };
 }

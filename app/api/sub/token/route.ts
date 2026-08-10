@@ -1,16 +1,13 @@
 // POST /api/sub/token
-// Body: { id, password? }
+// Body: { id }
 // Returns: { tokenUrl, expiresAt }
 //
 // Mints a fresh 15-minute download token for an existing subscription, so users
-// can keep importing after the previous token expired. If the subscription is
-// password-protected, the password is verified here (with brute-force
-// protection: 5 wrong attempts per IP+id per 10 minutes → 429).
+// can keep importing after the previous token expired. Rate-limited per IP.
 
 import { getClientIP } from "@/lib/http/ip";
 import { rateLimit } from "@/lib/ratelimit";
 import { getById } from "@/lib/sub/db";
-import { verifyPassword } from "@/lib/sub/password";
 import { signToken } from "@/lib/sub/token";
 import { getBaseUrl } from "@/lib/supabase/server";
 
@@ -41,26 +38,11 @@ export async function POST(request: Request) {
   let row;
   try {
     row = await getById(id);
-  } catch (e: any) {
+  } catch {
     return Response.json({ error: "Lookup failed" }, { status: 500 });
   }
   // Don't reveal existence: treat missing/expired the same.
   if (!row) return Response.json({ error: "Not found" }, { status: 404 });
-
-  if (row.password_hash) {
-    const pwd = typeof body?.password === "string" ? body.password : "";
-    if (!verifyPassword(pwd, row.password_hash)) {
-      // Brute-force protection on password attempts: 5 / 10 min / IP+id.
-      const bl = await rateLimit("pwd", ip, 5, 600, id);
-      if (!bl.ok) {
-        return Response.json(
-          { error: "Too many failed attempts. Locked temporarily." },
-          { status: 429, headers: { "Retry-After": "600" } }
-        );
-      }
-      return Response.json({ error: "Invalid password" }, { status: 401 });
-    }
-  }
 
   const { token, exp } = signToken(id, DEFAULT_TTL);
   const base = getBaseUrl();

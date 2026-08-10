@@ -23,7 +23,6 @@ interface ShareResult {
   tokenUrl: string;
   expiresAt: number; // ms epoch
   nodeCount: number;
-  protected: boolean;
 }
 
 export default function Home() {
@@ -38,7 +37,6 @@ export default function Home() {
   const [shareError, setShareError] = useState("");
   const [share, setShare] = useState<ShareResult | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [pwd, setPwd] = useState("");
   const [ttl, setTtl] = useState(15);
   const [maxDl, setMaxDl] = useState("");
   const [expiresHours, setExpiresHours] = useState("");
@@ -105,7 +103,6 @@ export default function Home() {
     setShareLoading(true);
     try {
       const body: any = { input, fullConfig: true, ttlMins: ttl || 15 };
-      if (pwd) body.password = pwd;
       if (maxDl) body.maxDownloads = Number(maxDl);
       if (expiresHours) body.expiresHours = Number(expiresHours);
       const res = await fetch("/api/sub/create", {
@@ -129,12 +126,10 @@ export default function Home() {
     setShareError("");
     setRefreshing(true);
     try {
-      const body: any = {};
-      if (share.protected && pwd) body.password = pwd;
       const res = await fetch("/api/sub/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: share.id, ...body }),
+        body: JSON.stringify({ id: share.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
@@ -277,20 +272,10 @@ export default function Home() {
                     onClick={() => setShareOptsOpen((v) => !v)}
                     className="text-xs text-zinc-400 hover:text-emerald-400"
                   >
-                    {shareOptsOpen ? "▾" : "▸"} 可选设置(密码 / 有效期 / 下载上限)
+                    {shareOptsOpen ? "▾" : "▸"} 可选设置(有效期 / 下载上限)
                   </button>
                   {shareOptsOpen && (
                     <div className="grid grid-cols-2 gap-3 text-xs">
-                      <label className="col-span-2 flex flex-col gap-1">
-                        <span className="text-zinc-500">密码(可选,保护短链接)</span>
-                        <input
-                          type="text"
-                          value={pwd}
-                          onChange={(e) => setPwd(e.target.value)}
-                          placeholder="留空则无密码"
-                          className="rounded-md bg-zinc-950 border border-zinc-700 px-2 py-1.5 outline-none focus:border-emerald-500"
-                        />
-                      </label>
                       <label className="flex flex-col gap-1">
                         <span className="text-zinc-500">下载链接有效期(分钟,≤60)</span>
                         <input
@@ -342,7 +327,7 @@ export default function Home() {
                     label="短链接 · 持久"
                     value={share.shortUrl}
                     onCopy={() => copyText(share.shortUrl, "短链接")}
-                    hint={share.protected ? "已加密码保护,需 ?pwd= 或 Basic 认证" : "可直接导入客户端"}
+                    hint="可直接导入客户端"
                   />
                   <LinkRow
                     label={

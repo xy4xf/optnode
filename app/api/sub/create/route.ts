@@ -1,5 +1,5 @@
 // POST /api/sub/create
-// Body: { input, fullConfig?, appendType?, template?, password?,
+// Body: { input, fullConfig?, appendType?, template?,
 //         ttlMins?(<=60, default 15), maxDownloads?, expiresHours? }
 // Returns: { id, code, shortUrl, tokenUrl, expiresAt, nodeCount }
 //
@@ -11,7 +11,6 @@
 import { convert, parseSubscription } from "@/lib/proxy";
 import { getClientIP } from "@/lib/http/ip";
 import { rateLimit } from "@/lib/ratelimit";
-import { hashPassword } from "@/lib/sub/password";
 import { createSubscription } from "@/lib/sub/db";
 import { signToken } from "@/lib/sub/token";
 import { getBaseUrl } from "@/lib/supabase/server";
@@ -56,10 +55,6 @@ export async function POST(request: Request) {
     return Response.json({ error: `Conversion failed: ${e?.message ?? e}` }, { status: 400 });
   }
 
-  // Optional password protection.
-  const password = typeof body?.password === "string" && body.password ? body.password : null;
-  const password_hash = password ? hashPassword(password) : null;
-
   // Optional lifetime caps.
   const maxDownloads =
     Number.isFinite(body?.maxDownloads) && body?.maxDownloads > 0
@@ -78,7 +73,6 @@ export async function POST(request: Request) {
     row = await createSubscription({
       content,
       node_count: nodeCount,
-      password_hash,
       max_downloads: maxDownloads,
       expires_at,
       creator_ip: ip,
@@ -98,6 +92,5 @@ export async function POST(request: Request) {
     shortUrl: `${base}/s/${row.code}`,
     tokenUrl: `${base}/api/sub/dl?id=${row.id}&t=${token}`,
     expiresAt: exp * 1000, // ms epoch for the client countdown
-    protected: !!password_hash,
   });
 }
