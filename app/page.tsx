@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { convert, parseSubscription } from "@/lib/proxy";
 
 const SAMPLES = [
@@ -17,11 +17,7 @@ const SAMPLES = [
 const META = { label: "mihomo / clash", ext: "yaml", mime: "text/yaml" };
 
 interface ShareResult {
-  id: string;
-  code: string;
   shortUrl: string;
-  tokenUrl: string;
-  expiresAt: number; // ms epoch
   nodeCount: number;
 }
 
@@ -32,16 +28,9 @@ export default function Home() {
 
   // share panel state
   const [shareOpen, setShareOpen] = useState(false);
-  const [shareOptsOpen, setShareOptsOpen] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState("");
   const [share, setShare] = useState<ShareResult | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [ttl, setTtl] = useState(15);
-  const [maxDl, setMaxDl] = useState("");
-  const [expiresHours, setExpiresHours] = useState("");
-  const [now, setNow] = useState(Date.now());
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { output, nodeCount, ok } = useMemo(() => {
     try {
@@ -52,17 +41,6 @@ export default function Home() {
       return { output: `// error: ${e?.message ?? e}`, nodeCount: 0, ok: false };
     }
   }, [input]);
-
-  // countdown ticker
-  useEffect(() => {
-    if (share) {
-      intervalRef.current = setInterval(() => setNow(Date.now()), 1000);
-      return () => {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      };
-    }
-  }, [share]);
 
   async function copyOutput() {
     try {
@@ -102,43 +80,18 @@ export default function Home() {
     }
     setShareLoading(true);
     try {
-      const body: any = { input, fullConfig: true, ttlMins: ttl || 15 };
-      if (maxDl) body.maxDownloads = Number(maxDl);
-      if (expiresHours) body.expiresHours = Number(expiresHours);
       const res = await fetch("/api/sub/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ input, fullConfig: true }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
-      setShare(data);
-      setNow(Date.now());
+      setShare({ shortUrl: data.shortUrl, nodeCount: data.nodeCount });
     } catch (e: any) {
       setShareError(e?.message ?? "Failed to create link");
     } finally {
       setShareLoading(false);
-    }
-  }
-
-  async function refreshToken() {
-    if (!share) return;
-    setShareError("");
-    setRefreshing(true);
-    try {
-      const res = await fetch("/api/sub/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: share.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
-      setShare({ ...share, tokenUrl: data.tokenUrl, expiresAt: data.expiresAt });
-      setNow(Date.now());
-    } catch (e: any) {
-      setShareError(e?.message ?? "Failed to refresh");
-    } finally {
-      setRefreshing(false);
     }
   }
 
@@ -147,11 +100,6 @@ export default function Home() {
     setShareError("");
     setShareOpen(true);
   }
-
-  const remaining = share ? Math.max(0, share.expiresAt - now) : 0;
-  const expired = share ? remaining <= 0 : false;
-  const mm = Math.floor(remaining / 60000);
-  const ss = Math.floor((remaining % 60000) / 1000);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-zinc-950 text-zinc-100">
@@ -212,13 +160,6 @@ export default function Home() {
             <button onClick={download} className="text-xs text-zinc-400 hover:text-emerald-400">
               download
             </button>
-            <button
-              onClick={openShare}
-              disabled={!ok}
-              className="text-xs text-emerald-400 hover:text-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              分享
-            </button>
           </div>
           <pre className="flex-1 min-h-0 overflow-auto p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all">
             {output}
@@ -263,55 +204,8 @@ export default function Home() {
               {!share ? (
                 <>
                   <p className="text-xs text-zinc-400">
-                    把当前输入({nodeCount} 个节点)转换成 mihomo YAML 并生成两种链接:
-                    <span className="text-zinc-300">短链接</span>(持久,可直接当订阅地址导入)与
-                    <span className="text-zinc-300">15 分钟下载链接</span>(临时,到期可续期)。
+                    把当前输入({nodeCount} 个节点)转换成 mihomo YAML,生成一个持久的订阅链接,可直接导入客户端。
                   </p>
-
-                  <button
-                    onClick={() => setShareOptsOpen((v) => !v)}
-                    className="text-xs text-zinc-400 hover:text-emerald-400"
-                  >
-                    {shareOptsOpen ? "▾" : "▸"} 可选设置(有效期 / 下载上限)
-                  </button>
-                  {shareOptsOpen && (
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <label className="flex flex-col gap-1">
-                        <span className="text-zinc-500">下载链接有效期(分钟,≤60)</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={60}
-                          value={ttl}
-                          onChange={(e) => setTtl(Number(e.target.value))}
-                          className="rounded-md bg-zinc-950 border border-zinc-700 px-2 py-1.5 outline-none focus:border-emerald-500"
-                        />
-                      </label>
-                      <label className="flex flex-col gap-1">
-                        <span className="text-zinc-500">最大下载次数(可选)</span>
-                        <input
-                          type="number"
-                          min={1}
-                          value={maxDl}
-                          onChange={(e) => setMaxDl(e.target.value)}
-                          placeholder="不限"
-                          className="rounded-md bg-zinc-950 border border-zinc-700 px-2 py-1.5 outline-none focus:border-emerald-500"
-                        />
-                      </label>
-                      <label className="col-span-2 flex flex-col gap-1">
-                        <span className="text-zinc-500">短链接存活时长(小时,≤720,可选)</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={720}
-                          value={expiresHours}
-                          onChange={(e) => setExpiresHours(e.target.value)}
-                          placeholder="不限"
-                          className="rounded-md bg-zinc-950 border border-zinc-700 px-2 py-1.5 outline-none focus:border-emerald-500"
-                        />
-                      </label>
-                    </div>
-                  )}
 
                   <button
                     onClick={createShare}
@@ -324,29 +218,12 @@ export default function Home() {
               ) : (
                 <div className="space-y-3">
                   <LinkRow
-                    label="短链接 · 持久"
+                    label="订阅链接"
                     value={share.shortUrl}
-                    onCopy={() => copyText(share.shortUrl, "短链接")}
-                    hint="可直接导入客户端"
-                  />
-                  <LinkRow
-                    label={
-                      expired
-                        ? "15 分钟下载链接 · 已过期"
-                        : `15 分钟下载链接 · 剩余 ${mm}:${ss.toString().padStart(2, "0")}`
-                    }
-                    value={share.tokenUrl}
-                    onCopy={() => copyText(share.tokenUrl, "下载链接")}
-                    expired={expired}
+                    onCopy={() => copyText(share.shortUrl, "链接")}
+                    hint="可直接导入客户端 · 持久有效"
                   />
                   <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={refreshToken}
-                      disabled={refreshing}
-                      className="rounded-md px-3 py-1.5 text-xs font-medium bg-zinc-800 text-zinc-200 border border-zinc-700 hover:bg-zinc-700 disabled:opacity-50"
-                    >
-                      {refreshing ? "续期中…" : "续期(重新生成 15 分钟链接)"}
-                    </button>
                     <span className="text-[11px] text-zinc-600">{share.nodeCount} nodes</span>
                   </div>
                 </div>
@@ -370,16 +247,14 @@ function LinkRow({
   value,
   onCopy,
   hint,
-  expired,
 }: {
   label: string;
   value: string;
   onCopy: () => void;
   hint?: string;
-  expired?: boolean;
 }) {
   return (
-    <div className={expired ? "opacity-50" : ""}>
+    <div>
       <div className="flex items-center justify-between mb-1">
         <span className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</span>
         <button onClick={onCopy} className="text-xs text-emerald-400 hover:text-emerald-300">

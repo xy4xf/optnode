@@ -11,9 +11,7 @@ export interface SubscriptionRow {
   code: string;
   content: string;
   node_count: number;
-  max_downloads: number | null;
   download_count: number;
-  expires_at: string | null;
   creator_ip: string | null;
   created_at: string;
 }
@@ -21,8 +19,6 @@ export interface SubscriptionRow {
 export interface CreateInput {
   content: string;
   node_count: number;
-  max_downloads: number | null;
-  expires_at: string | null;
   creator_ip: string;
 }
 
@@ -37,8 +33,6 @@ export async function createSubscription(input: CreateInput): Promise<Subscripti
         code,
         content: input.content,
         node_count: input.node_count,
-        max_downloads: input.max_downloads,
-        expires_at: input.expires_at,
         creator_ip: input.creator_ip,
       })
       .select()
@@ -73,19 +67,11 @@ export async function getByCode(code: string): Promise<SubscriptionRow | null> {
 }
 
 /**
- * Atomically bump the download counter, returning the new count. Caller must
- * have already validated expiry / max_downloads.
+ * Atomically bump the download counter, returning the new count.
  */
 export async function incrementDownload(id: string): Promise<number> {
   const sb = getSupabase();
   const { data, error } = await sb.rpc("bump_download", { p_id: id });
   if (error) throw error;
   return typeof data === "number" ? data : Number(data) || 0;
-}
-
-/** Whether a row is still servable (not expired, under download cap). */
-export function isServable(row: SubscriptionRow): boolean {
-  if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) return false;
-  if (row.max_downloads != null && row.download_count >= row.max_downloads) return false;
-  return true;
 }

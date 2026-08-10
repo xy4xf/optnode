@@ -1,18 +1,16 @@
 // POST /api/sub/create
-// Body: { input, fullConfig?, appendType?, template?,
-//         ttlMins?(<=60, default 15), maxDownloads?, expiresHours? }
-// Returns: { id, code, shortUrl, tokenUrl, expiresAt, nodeCount }
+// Body: { input, fullConfig?, appendType?, template? }
+// Returns: { code, shortUrl, nodeCount }
 //
 // Converts pasted nodes to mihomo YAML (reusing the existing convert() core),
-// stores it in Supabase under a fresh short code, and returns both a
-// persistent short link and a 15-minute HMAC-signed download link. Rate-limited
+// stores it in Supabase under a fresh short code, and returns a persistent
+// short link that can be imported directly as a subscription URL. Rate-limited
 // per IP to prevent abuse.
 
 import { convert, parseSubscription } from "@/lib/proxy";
 import { getClientIP } from "@/lib/http/ip";
 import { rateLimit } from "@/lib/ratelimit";
 import { createSubscription } from "@/lib/sub/db";
-import { signToken } from "@/lib/sub/token";
 import { getBaseUrl } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -55,42 +53,17 @@ export async function POST(request: Request) {
     return Response.json({ error: `Conversion failed: ${e?.message ?? e}` }, { status: 400 });
   }
 
-  // Optional lifetime caps.
-  const maxDownloads =
-    Number.isFinite(body?.maxDownloads) && body?.maxDownloads > 0
-      ? Math.min(100000, Math.floor(body.maxDownloads))
-      : null;
-  const expiresHours =
-    Number.isFinite(body?.expiresHours) && body?.expiresHours > 0
-      ? Math.min(720, Math.floor(body.expiresHours)) // max 30 days
-      : null;
-  const expires_at = expiresHours
-    ? new Date(Date.now() + expiresHours * 3600 * 1000).toISOString()
-    : null;
-
   let row;
   try {
-    row = await createSubscription({
-      content,
-      node_count: nodeCount,
-      max_downloads: maxDownloads,
-      expires_at,
-      creator_ip: ip,
-    });
+    row = await createSubscription({ content, node_count: nodeCount, creator_ip: ip });
   } catch (e: any) {
     return Response.json({ error: `Failed to store subscription: ${e?.message ?? e}` }, { status: 500 });
   }
 
-  const ttlMins = Number.isFinite(body?.ttlMins) && body?.ttlMins > 0 ? body.ttlMins : 15;
-  const { token, exp } = signToken(row.id, ttlMins);
   const base = getBaseUrl();
-
   return Response.json({
-    id: row.id,
     code: row.code,
     nodeCount,
     shortUrl: `${base}/s/${row.code}`,
-    tokenUrl: `${base}/api/sub/dl?id=${row.id}&t=${token}`,
-    expiresAt: exp * 1000, // ms epoch for the client countdown
   });
 }

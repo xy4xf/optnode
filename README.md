@@ -64,36 +64,27 @@ curl "http://localhost:3000/api/sub?url=https://example.com/sub&raw=1"
 Query flags: `fullConfig=0` (bare list), `appendType=1` (prefix node names with `[type]`),
 `template=minimal` (bare `PROXY`/`AUTO` config instead of ACL4SSR), `raw=1` (no conversion).
 
-### 订阅下载链接 (Supabase-backed)
+### 订阅链接 (Supabase-backed)
 
-Share the converted mihomo config as importable subscription links, backed by
-Supabase. Each share yields two URLs:
+Share the converted mihomo config as an importable subscription link, backed by
+Supabase. Each share yields a single persistent URL:
 
 - **Short link** `GET /s/<code>` — persistent, serves the raw YAML, importable as
-  a subscription URL in any client. Rate-limited; missing/expired codes return a
+  a subscription URL in any client. Rate-limited; missing codes return a
   uniform `404` (enumerate-resistant).
-- **15-minute download link** `GET /api/sub/dl?id=<uuid>&t=<token>` — HMAC-signed,
-  stateless token valid for 15 min (refreshable). Expired tokens return `410`.
 
 ```bash
-# create a share (returns shortUrl + tokenUrl)
+# create a share (returns shortUrl)
 curl -X POST http://localhost:3000/api/sub/create \
   -H 'Content-Type: application/json' \
-  -d '{"input":"hysteria2://pass@host:443?sni=h#n1","ttlMins":15}'
-# => {"id","code","shortUrl","tokenUrl","expiresAt","nodeCount"}
+  -d '{"input":"hysteria2://pass@host:443?sni=h#n1"}'
+# => {"code","shortUrl","nodeCount"}
 
-# refresh the 15-min token when it expires
-curl -X POST http://localhost:3000/api/sub/token \
-  -H 'Content-Type: application/json' \
-  -d '{"id":"<uuid>"}'
-
-# either URL serves the mihomo YAML directly
+# the short link serves the mihomo YAML directly
 curl "http://localhost:3000/s/<code>"
-curl "http://localhost:3000/api/sub/dl?id=<uuid>&t=<token>"
 ```
 
-`create` options: `fullConfig`, `appendType`, `template`, `ttlMins`
-(≤60, default 15), `maxDownloads`, `expiresHours` (short-link lifetime, ≤720).
+`create` options: `fullConfig`, `appendType`, `template`.
 
 **Setup:** apply the schema with the Supabase CLI (no manual paste):
 
@@ -103,16 +94,15 @@ supabase link --project-ref <your-project-ref>     # ref = Project Settings → 
 supabase db push                                   # applies supabase/migrations/*.sql
 ```
 
-Then set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUB_LINK_SECRET`
+Then set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 (see [`.env.example`](./.env.example)) and `PUBLIC_BASE_URL`.
 
-> Alternatively, open [`supabase/migrations/0001_init.sql`](./supabase/migrations/0001_init.sql)
-> in the Supabase SQL Editor and Run it. The CLI path is preferred — future
+> Alternatively, open the files in [`supabase/migrations/`](./supabase/migrations)
+> in the Supabase SQL Editor and Run them. The CLI path is preferred — future
 > schema changes go in a new `supabase/migrations/*.sql` file and `db push` again.
 
 **Brute-force protection:** unguessable 50-bit short codes + uniform 404s;
-HMAC-signed tokens (cannot be forged or extended); per-IP rate limits on
-`create` (10/h), `token` (20/h), `dl` (120/min), `/s/` (60/min). All DB access
+per-IP rate limits on `create` (10/h) and `/s/` (60/min). All DB access
 uses the service role key server-side; tables have RLS enabled with no policies.
 
 ### Library
