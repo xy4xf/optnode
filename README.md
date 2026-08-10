@@ -64,6 +64,48 @@ curl "http://localhost:3000/api/sub?url=https://example.com/sub&raw=1"
 Query flags: `fullConfig=0` (bare list), `appendType=1` (prefix node names with `[type]`),
 `template=minimal` (bare `PROXY`/`AUTO` config instead of ACL4SSR), `raw=1` (no conversion).
 
+### 订阅下载链接 (Supabase-backed)
+
+Share the converted mihomo config as importable subscription links, backed by
+Supabase. Each share yields two URLs:
+
+- **Short link** `GET /s/<code>` — persistent, serves the raw YAML, importable as
+  a subscription URL in any client. Optionally password-protected (`?pwd=` or
+  `Authorization: Basic`). Rate-limited; missing/expired codes return a uniform
+  `404` (enumerate-resistant).
+- **15-minute download link** `GET /api/sub/dl?id=<uuid>&t=<token>` — HMAC-signed,
+  stateless token valid for 15 min (refreshable). Expired tokens return `410`.
+
+```bash
+# create a share (returns shortUrl + tokenUrl)
+curl -X POST http://localhost:3000/api/sub/create \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"hysteria2://pass@host:443?sni=h#n1","ttlMins":15}'
+# => {"id","code","shortUrl","tokenUrl","expiresAt","nodeCount","protected"}
+
+# refresh the 15-min token when it expires (password required if protected)
+curl -X POST http://localhost:3000/api/sub/token \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"<uuid>","password":"optional"}'
+
+# either URL serves the mihomo YAML directly
+curl "http://localhost:3000/s/<code>"
+curl "http://localhost:3000/api/sub/dl?id=<uuid>&t=<token>"
+```
+
+`create` options: `fullConfig`, `appendType`, `template`, `password`, `ttlMins`
+(≤60, default 15), `maxDownloads`, `expiresHours` (short-link lifetime, ≤720).
+
+**Setup:** run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL
+Editor, then set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUB_LINK_SECRET`
+(see [`.env.example`](./.env.example)) and `PUBLIC_BASE_URL`.
+
+**Brute-force protection:** unguessable 50-bit short codes + uniform 404s;
+HMAC-signed tokens (cannot be forged or extended); per-IP rate limits on
+`create` (10/h), `token` (20/h), `dl` (120/min), `/s/` (60/min); password
+attempts capped at 5/10 min per IP+target with scrypt hashing. All DB access uses
+the service role key server-side; tables have RLS enabled with no policies.
+
 ### Library
 
 ```ts
